@@ -48,9 +48,21 @@ kotlin {
             }
         }
 
-        val iosX64Main by getting
-        val iosArm64Main by getting
-        val iosSimulatorArm64Main by getting
+        val iosX64Main by getting {
+            dependencies {
+                implementation(compose.ui)
+            }
+        }
+        val iosArm64Main by getting {
+            dependencies {
+                implementation(compose.ui)
+            }
+        }
+        val iosSimulatorArm64Main by getting {
+            dependencies {
+                implementation(compose.ui)
+            }
+        }
     }
 
     cocoapods {
