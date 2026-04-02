@@ -2,6 +2,8 @@ package shared.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -10,17 +12,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
     onLoginSuccess: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var email by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
@@ -32,6 +30,30 @@ fun LoginScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        // Logo/Title Section
+        Icon(
+            imageVector = Icons.Default.CameraAlt,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "证件照制作",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Text(
+            text = "轻松制作各类证件照",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 48.dp)
+        )
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -43,22 +65,19 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Login",
-                    style = MaterialTheme.typography.headlineMedium,
+                    text = "登录",
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 32.dp)
+                    modifier = Modifier.padding(bottom = 24.dp)
                 )
 
                 OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email") },
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("用户名") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 16.dp),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Email
-                    ),
                     singleLine = true,
                     isError = errorMessage.isNotEmpty()
                 )
@@ -66,7 +85,7 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text("密码") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp),
@@ -93,37 +112,20 @@ fun LoginScreen(
 
                 Button(
                     onClick = {
-                        if (email.isEmpty() || password.isEmpty()) {
-                            errorMessage = "Please fill all fields"
+                        if (username.isEmpty() || password.isEmpty()) {
+                            errorMessage = "请输入用户名和密码"
                             return@Button
                         }
 
-                        isLoading = true
-                        errorMessage = ""
-
-                        // Validate email format
-                        if (!email.contains("@")) {
-                            errorMessage = "Please enter a valid email"
-                            isLoading = false
-                            return@Button
-                        }
-
-                        // Simulate login process with delay
-                        CoroutineScope(Dispatchers.Main).launch {
-                            delay(1000)
-
-                            if (email == "test@example.com" && password == "password") {
-                                onLoginSuccess(email)
-                            } else {
-                                errorMessage = "Invalid email or password"
-                            }
-
-                            isLoading = false
+                        if (username == "jiang" && password == "tao") {
+                            onLoginSuccess(username)
+                        } else {
+                            errorMessage = "用户名或密码错误"
                         }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
+                        .height(50.dp),
                     enabled = !isLoading
                 ) {
                     if (isLoading) {
@@ -133,21 +135,7 @@ fun LoginScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Login", style = MaterialTheme.typography.titleMedium)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TextButton(onClick = {}) {
-                        Text("Forgot Password?")
-                    }
-                    TextButton(onClick = {}) {
-                        Text("Sign Up")
+                        Text("登录", style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
@@ -157,7 +145,9 @@ fun LoginScreen(
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         ) {
             Column(
                 modifier = Modifier
@@ -166,18 +156,18 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Demo Credentials",
+                    text = "测试账号",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 Text(
-                    text = "Email: test@example.com",
-                    style = MaterialTheme.typography.bodySmall
+                    text = "用户名: jiang",
+                    style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "Password: password",
-                    style = MaterialTheme.typography.bodySmall
+                    text = "密码: tao",
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
         }
