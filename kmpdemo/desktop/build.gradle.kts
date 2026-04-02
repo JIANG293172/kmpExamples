@@ -8,20 +8,13 @@ plugins {
 group = "com.example.kmpdemo"
 version = "1.0-SNAPSHOT"
 
-repositories {
-    mavenCentral()
-    google()
-    maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
-}
-
 kotlin {
     jvmToolchain(17)
 }
 
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation(compose.material3)
-    implementation(project(":kmpdemo"))
+    implementation(project(":shared"))
 }
 
 compose.desktop {
