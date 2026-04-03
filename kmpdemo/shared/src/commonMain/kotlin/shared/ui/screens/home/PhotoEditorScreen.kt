@@ -15,14 +15,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import shared.data.BackgroundColor
+import shared.data.BackgroundType
 import shared.data.ClothingTemplate
 import shared.data.ClothingTemplates
-import shared.data.PhotoSize
+import shared.data.ClothingType
 import shared.navigation.AppState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,13 +33,27 @@ import shared.navigation.AppState
 fun PhotoEditorScreen(
     state: AppState,
     onBack: () -> Unit,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onCropClick: () -> Unit = {}
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     var selectedBackground by remember { mutableStateOf(BackgroundColor.BLUE) }
+    var selectedBackgroundType by remember { mutableStateOf(BackgroundType.SOLID) }
     var selectedClothing by remember { mutableStateOf<ClothingTemplate?>(null) }
+    var selectedClothingType by remember { mutableStateOf<ClothingType?>(null) }
+
+    // 美化参数
     var brightness by remember { mutableFloatStateOf(0f) }
     var contrast by remember { mutableFloatStateOf(0f) }
+    var sharpness by remember { mutableFloatStateOf(0f) }
+    var denoise by remember { mutableFloatStateOf(0f) }
+    var exposure by remember { mutableFloatStateOf(0f) }
+
+    // 高级美颜参数（会员）
+    var skinSmooth by remember { mutableFloatStateOf(0f) }
+    var faceSlim by remember { mutableFloatStateOf(0f) }
+    var eyeEnlarge by remember { mutableFloatStateOf(0f) }
+    var eyeBrighten by remember { mutableFloatStateOf(0f) }
 
     Scaffold(
         topBar = {
@@ -48,6 +65,9 @@ fun PhotoEditorScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onCropClick) {
+                        Icon(Icons.Default.Crop, contentDescription = "裁剪")
+                    }
                     TextButton(onClick = onDone) {
                         Text("完成", color = MaterialTheme.colorScheme.primary)
                     }
@@ -70,6 +90,7 @@ fun PhotoEditorScreen(
             ) {
                 PhotoPreview(
                     backgroundColor = selectedBackground,
+                    backgroundType = selectedBackgroundType,
                     hasPhoto = state.hasSelectedPhoto
                 )
             }
@@ -112,17 +133,41 @@ fun PhotoEditorScreen(
                     when (selectedTab) {
                         0 -> BackgroundTab(
                             selected = selectedBackground,
-                            onSelect = { selectedBackground = it }
+                            selectedType = selectedBackgroundType,
+                            onSelect = { selectedBackground = it },
+                            onTypeSelect = { selectedBackgroundType = it }
                         )
                         1 -> ClothingTab(
                             selected = selectedClothing,
-                            onSelect = { selectedClothing = it }
+                            selectedType = selectedClothingType,
+                            onSelect = { selectedClothing = it },
+                            onTypeSelect = { selectedClothingType = it }
                         )
                         2 -> EnhanceTab(
                             brightness = brightness,
                             contrast = contrast,
+                            sharpness = sharpness,
+                            denoise = denoise,
+                            exposure = exposure,
+                            skinSmooth = skinSmooth,
+                            faceSlim = faceSlim,
+                            eyeEnlarge = eyeEnlarge,
+                            eyeBrighten = eyeBrighten,
                             onBrightnessChange = { brightness = it },
-                            onContrastChange = { contrast = it }
+                            onContrastChange = { contrast = it },
+                            onSharpnessChange = { sharpness = it },
+                            onDenoiseChange = { denoise = it },
+                            onExposureChange = { exposure = it },
+                            onSkinSmoothChange = { skinSmooth = it },
+                            onFaceSlimChange = { faceSlim = it },
+                            onEyeEnlargeChange = { eyeEnlarge = it },
+                            onEyeBrightenChange = { eyeBrighten = it },
+                            onAutoEnhance = {
+                                brightness = 0.1f
+                                contrast = 0.1f
+                                sharpness = 0.2f
+                                exposure = 0.05f
+                            }
                         )
                     }
                 }
@@ -134,13 +179,29 @@ fun PhotoEditorScreen(
 @Composable
 private fun PhotoPreview(
     backgroundColor: BackgroundColor,
+    backgroundType: BackgroundType,
     hasPhoto: Boolean
 ) {
+    val backgroundModifier = when (backgroundType) {
+        BackgroundType.SOLID -> Modifier.background(Color(backgroundColor.colorValue))
+        BackgroundType.GRADIENT -> {
+            val colors = backgroundColor.gradientColors ?: listOf(backgroundColor.colorValue, backgroundColor.colorValue)
+            Modifier.background(
+                Brush.linearGradient(
+                    colors = colors.map { Color(it) }
+                )
+            )
+        }
+        BackgroundType.TRANSPARENT -> Modifier.background(
+            checkerboardPattern()
+        )
+    }
+
     Box(
         modifier = Modifier
             .size(280.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(backgroundColor.colorValue)),
+            .then(backgroundModifier),
         contentAlignment = Alignment.Center
     ) {
         if (hasPhoto) {
@@ -176,14 +237,18 @@ private fun PhotoPreview(
                     Icons.Default.AddAPhoto,
                     contentDescription = null,
                     modifier = Modifier.size(64.dp),
-                    tint = if (backgroundColor == BackgroundColor.WHITE || backgroundColor == BackgroundColor.GRAY)
+                    tint = if (backgroundType == BackgroundType.TRANSPARENT ||
+                        backgroundColor == BackgroundColor.WHITE ||
+                        backgroundColor == BackgroundColor.LIGHT_GRAY)
                         Color.Gray else Color.White.copy(alpha = 0.5f)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "请选择或拍摄照片",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (backgroundColor == BackgroundColor.WHITE || backgroundColor == BackgroundColor.GRAY)
+                    color = if (backgroundType == BackgroundType.TRANSPARENT ||
+                        backgroundColor == BackgroundColor.WHITE ||
+                        backgroundColor == BackgroundColor.LIGHT_GRAY)
                         Color.Gray else Color.White.copy(alpha = 0.7f)
                 )
             }
@@ -192,36 +257,105 @@ private fun PhotoPreview(
 }
 
 @Composable
+private fun checkerboardPattern(): Brush {
+    // 棋盘格背景表示透明
+    return Brush.linearGradient(
+        colors = listOf(
+            Color.LightGray,
+            Color.White,
+            Color.LightGray
+        )
+    )
+}
+
+@Composable
 private fun BackgroundTab(
     selected: BackgroundColor,
-    onSelect: (BackgroundColor) -> Unit
+    selectedType: BackgroundType,
+    onSelect: (BackgroundColor) -> Unit,
+    onTypeSelect: (BackgroundType) -> Unit
 ) {
+    var showCustomBackgroundDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // 背景类型选择
         Text(
-            text = "选择背景颜色",
+            text = "背景类型",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            BackgroundTypeChip(
+                label = "纯色",
+                icon = Icons.Default.Square,
+                isSelected = selectedType == BackgroundType.SOLID,
+                onClick = { onTypeSelect(BackgroundType.SOLID) },
+                modifier = Modifier.weight(1f)
+            )
+            BackgroundTypeChip(
+                label = "渐变",
+                icon = Icons.Default.Gradient,
+                isSelected = selectedType == BackgroundType.GRADIENT,
+                onClick = { onTypeSelect(BackgroundType.GRADIENT) },
+                modifier = Modifier.weight(1f)
+            )
+            BackgroundTypeChip(
+                label = "透明",
+                icon = Icons.Default.Layers,
+                isSelected = selectedType == BackgroundType.TRANSPARENT,
+                onClick = { onTypeSelect(BackgroundType.TRANSPARENT) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 颜色选择
+        Text(
+            text = if (selectedType == BackgroundType.GRADIENT) "渐变颜色" else "背景颜色",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(12.dp))
 
+        val colorsToShow = when (selectedType) {
+            BackgroundType.SOLID -> BackgroundColor.getSolidColors()
+            BackgroundType.GRADIENT -> BackgroundColor.getGradientColors()
+            BackgroundType.TRANSPARENT -> listOf(BackgroundColor.TRANSPARENT)
+        }
+
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(BackgroundColor.entries.toList()) { color ->
+            items(colorsToShow) { color ->
                 BackgroundColorItem(
                     color = color,
+                    backgroundType = selectedType,
                     isSelected = selected == color,
                     onClick = { onSelect(color) }
+                )
+            }
+
+            // 自定义颜色按钮
+            item {
+                CustomBackgroundItem(
+                    onClick = { showCustomBackgroundDialog = true }
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // AI抠图说明
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -235,23 +369,100 @@ private fun BackgroundTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    Icons.Default.Info,
+                    Icons.Default.AutoAwesome,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "AI智能抠图，自动分离人物与背景",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Column {
+                    Text(
+                        text = "AI智能抠图",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "发丝级抠图，边缘自然过渡",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
+
+        // 适用场景说明
+        if (selected != BackgroundColor.TRANSPARENT) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "适用场景: ${getApplicableScene(selected)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
+
+    // 自定义颜色对话框（简化版）
+    if (showCustomBackgroundDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomBackgroundDialog = false },
+            title = { Text("自定义背景") },
+            text = {
+                Column {
+                    Text("可选择纯色或从相册导入图片作为背景")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { /* 选择纯色 */ },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Square, null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("纯色")
+                        }
+                        OutlinedButton(
+                            onClick = { /* 从相册选择 */ },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Image, null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("图片")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCustomBackgroundDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun BackgroundTypeChip(
+    label: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = isSelected,
+        onClick = onClick,
+        label = { Text(label) },
+        leadingIcon = {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        },
+        modifier = modifier
+    )
 }
 
 @Composable
 private fun BackgroundColorItem(
     color: BackgroundColor,
+    backgroundType: BackgroundType,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
@@ -262,7 +473,21 @@ private fun BackgroundColorItem(
             modifier = Modifier
                 .size(56.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(color.colorValue))
+                .then(
+                    if (backgroundType == BackgroundType.GRADIENT && color.gradientColors != null) {
+                        Modifier.background(
+                            Brush.linearGradient(color.gradientColors.map { Color(it) })
+                        )
+                    } else if (backgroundType == BackgroundType.TRANSPARENT) {
+                        Modifier.background(
+                            Brush.linearGradient(
+                                colors = listOf(Color.LightGray, Color.White)
+                            )
+                        )
+                    } else {
+                        Modifier.background(Color(color.colorValue))
+                    }
+                )
                 .then(
                     if (isSelected) {
                         Modifier.border(
@@ -279,8 +504,15 @@ private fun BackgroundColorItem(
                 Icon(
                     Icons.Default.Check,
                     contentDescription = "选中",
-                    tint = if (color == BackgroundColor.WHITE || color == BackgroundColor.GRAY)
+                    tint = if (color == BackgroundColor.WHITE || color == BackgroundColor.LIGHT_GRAY)
                         Color.Black else Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            } else if (backgroundType == BackgroundType.TRANSPARENT) {
+                Icon(
+                    Icons.Default.Layers,
+                    contentDescription = "透明",
+                    tint = Color.Gray,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -294,36 +526,136 @@ private fun BackgroundColorItem(
 }
 
 @Composable
+private fun CustomBackgroundItem(
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.outline,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "自定义",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "自定义",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+private fun getApplicableScene(color: BackgroundColor): String {
+    return when (color) {
+        BackgroundColor.WHITE -> "身份证、护照、简历"
+        BackgroundColor.RED -> "党员证、学生证"
+        BackgroundColor.BLUE -> "工作证、毕业证"
+        BackgroundColor.LIGHT_BLUE -> "医保、签证"
+        BackgroundColor.LIGHT_GRAY -> "公务员、考试"
+        BackgroundColor.DARK_RED -> "港澳通行证"
+        BackgroundColor.DARK_BLUE -> "护照、签证"
+        BackgroundColor.PALE_BLUE -> "签证、护照"
+        else -> "通用"
+    }
+}
+
+@Composable
 private fun ClothingTab(
     selected: ClothingTemplate?,
-    onSelect: (ClothingTemplate?) -> Unit
+    selectedType: ClothingType?,
+    onSelect: (ClothingTemplate?) -> Unit,
+    onTypeSelect: (ClothingType?) -> Unit
 ) {
+    var showPremiumDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // 服装类型选择
         Text(
-            text = "选择服装模板",
+            text = "服装类型",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
         )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedType == null,
+                onClick = { onTypeSelect(null) },
+                label = { Text("全部") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = selectedType == ClothingType.MEN,
+                onClick = { onTypeSelect(ClothingType.MEN) },
+                label = { Text("男装") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = selectedType == ClothingType.WOMEN,
+                onClick = { onTypeSelect(ClothingType.WOMEN) },
+                label = { Text("女装") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = selectedType == ClothingType.STUDENT,
+                onClick = { onTypeSelect(ClothingType.STUDENT) },
+                label = { Text("学生装") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
+
+        // 服装列表
+        val templates = if (selectedType == null) {
+            ClothingTemplates.allTemplates
+        } else {
+            ClothingTemplates.getByType(selectedType)
+        }
 
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(ClothingTemplates.templates) { template ->
+            items(templates) { template ->
                 ClothingItem(
                     template = template,
                     isSelected = selected == template,
-                    onClick = { onSelect(if (selected == template) null else template) }
+                    onClick = {
+                        if (!template.isFree) {
+                            showPremiumDialog = true
+                        } else {
+                            onSelect(if (selected == template) null else template)
+                        }
+                    }
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 当前选择
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -333,20 +665,91 @@ private fun ClothingTab(
             Column(
                 modifier = Modifier.padding(12.dp)
             ) {
-                Text(
-                    text = if (selected != null) "已选择: ${selected.name}" else "请选择服装",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = if (selected != null) "已选择: ${selected.name}" else "请选择服装",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (selected != null) {
+                            Text(
+                                text = selected.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (selected != null) {
+                        IconButton(onClick = { onSelect(null) }) {
+                            Icon(Icons.Default.Close, "清除")
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 服装替换说明
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary
                 )
-                if (selected != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "自动贴合肩部，边缘自然融合",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+
+    // 会员提示对话框
+    if (showPremiumDialog) {
+        AlertDialog(
+            onDismissRequest = { showPremiumDialog = false },
+            icon = { Icon(Icons.Default.WorkspacePremium, null) },
+            title = { Text("会员专享") },
+            text = {
+                Column {
+                    Text("该服装模板为会员专享内容")
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = selected.description,
+                        text = "开通会员可解锁全部服装模板",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            },
+            confirmButton = {
+                Button(onClick = { showPremiumDialog = false }) {
+                    Text("立即开通")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPremiumDialog = false }) {
+                    Text("稍后")
+                }
             }
-        }
+        )
     }
 }
 
@@ -376,19 +779,39 @@ private fun ClothingItem(
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Default.Checkroom,
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.Checkroom,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                if (!template.isFree) {
+                    Icon(
+                        Icons.Default.Lock,
+                        contentDescription = "付费",
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = template.name,
             style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1
         )
+        if (!template.isFree) {
+            Text(
+                text = "VIP",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+        }
     }
 }
 
@@ -396,82 +819,193 @@ private fun ClothingItem(
 private fun EnhanceTab(
     brightness: Float,
     contrast: Float,
+    sharpness: Float,
+    denoise: Float,
+    exposure: Float,
+    skinSmooth: Float,
+    faceSlim: Float,
+    eyeEnlarge: Float,
+    eyeBrighten: Float,
     onBrightnessChange: (Float) -> Unit,
-    onContrastChange: (Float) -> Unit
+    onContrastChange: (Float) -> Unit,
+    onSharpnessChange: (Float) -> Unit,
+    onDenoiseChange: (Float) -> Unit,
+    onExposureChange: (Float) -> Unit,
+    onSkinSmoothChange: (Float) -> Unit,
+    onFaceSlimChange: (Float) -> Unit,
+    onEyeEnlargeChange: (Float) -> Unit,
+    onEyeBrightenChange: (Float) -> Unit,
+    onAutoEnhance: () -> Unit
 ) {
+    var showAdvanced by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // 基础美化
         Text(
             text = "画质增强",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
         )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 亮度
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.WbSunny,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "亮度",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.width(50.dp)
-            )
-            Slider(
-                value = brightness,
-                onValueChange = onBrightnessChange,
-                valueRange = -1f..1f,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "${(brightness * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.width(40.dp)
-            )
-        }
-
         Spacer(modifier = Modifier.height(12.dp))
 
+        // 智能曝光
+        EnhanceSlider(
+            icon = Icons.Default.WbSunny,
+            label = "智能曝光",
+            value = exposure,
+            onValueChange = onExposureChange,
+            valueRange = -0.2f..0.2f,
+            infoText = "自动校正亮度 ±20%"
+        )
+
+        // 亮度
+        EnhanceSlider(
+            icon = Icons.Default.Brightness6,
+            label = "亮度",
+            value = brightness,
+            onValueChange = onBrightnessChange,
+            valueRange = -1f..1f
+        )
+
         // 对比度
+        EnhanceSlider(
+            icon = Icons.Default.Contrast,
+            label = "对比度",
+            value = contrast,
+            onValueChange = onContrastChange,
+            valueRange = -1f..1f,
+            infoText = "自动优化 ±15%"
+        )
+
+        // 锐化
+        EnhanceSlider(
+            icon = Icons.Default.ShutterSpeed,
+            label = "锐化",
+            value = sharpness,
+            onValueChange = onSharpnessChange,
+            valueRange = 0f..1f,
+            infoText = "0.1~0.3 轻度增强五官"
+        )
+
+        // 降噪
+        EnhanceSlider(
+            icon = Icons.Default.NoiseAware,
+            label = "降噪",
+            value = denoise,
+            onValueChange = onDenoiseChange,
+            valueRange = 0f..1f,
+            infoText = "去除夜间噪点"
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 高级美颜切换
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Contrast,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "对比度",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.width(50.dp)
+                text = "高级美颜",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
             )
-            Slider(
-                value = contrast,
-                onValueChange = onContrastChange,
-                valueRange = -1f..1f,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "${(contrast * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.width(40.dp)
+            FilterChip(
+                selected = showAdvanced,
+                onClick = { showAdvanced = !showAdvanced },
+                label = { Text(if (showAdvanced) "收起" else "展开") },
+                leadingIcon = {
+                    Icon(
+                        if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // 高级美颜选项（会员）
+        if (showAdvanced) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.WorkspacePremium,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "会员专享功能",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 磨皮
+            EnhanceSlider(
+                icon = Icons.Default.Face,
+                label = "磨皮",
+                value = skinSmooth,
+                onValueChange = onSkinSmoothChange,
+                valueRange = 0f..0.3f,
+                infoText = "保留毛孔，自然美肤",
+                isPremium = true
+            )
+
+            // 瘦脸
+            EnhanceSlider(
+                icon = Icons.Default.Face,
+                label = "瘦脸",
+                value = faceSlim,
+                onValueChange = onFaceSlimChange,
+                valueRange = 0f..0.2f,
+                infoText = "禁止过度变形",
+                isPremium = true
+            )
+
+            // 大眼
+            EnhanceSlider(
+                icon = Icons.Default.Visibility,
+                label = "大眼",
+                value = eyeEnlarge,
+                onValueChange = onEyeEnlargeChange,
+                valueRange = 0f..0.15f,
+                infoText = "0~15% 自然放大",
+                isPremium = true
+            )
+
+            // 亮眼
+            EnhanceSlider(
+                icon = Icons.Default.AutoAwesome,
+                label = "亮眼",
+                value = eyeBrighten,
+                onValueChange = onEyeBrightenChange,
+                valueRange = 0f..0.25f,
+                isPremium = true
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
 
         // 快捷按钮
         Row(
@@ -482,17 +1016,84 @@ private fun EnhanceTab(
                 onClick = {
                     onBrightnessChange(0f)
                     onContrastChange(0f)
+                    onSharpnessChange(0f)
+                    onDenoiseChange(0f)
+                    onExposureChange(0f)
                 },
                 modifier = Modifier.weight(1f)
             ) {
                 Text("重置")
             }
             Button(
-                onClick = { /* 自动增强 */ },
+                onClick = onAutoEnhance,
                 modifier = Modifier.weight(1f)
             ) {
+                Icon(Icons.Default.AutoFixHigh, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
                 Text("自动增强")
             }
+        }
+    }
+}
+
+@Composable
+private fun EnhanceSlider(
+    icon: ImageVector,
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    infoText: String? = null,
+    isPremium: Boolean = false
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = if (isPremium) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.width(60.dp)
+            )
+            if (isPremium) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = "付费",
+                    modifier = Modifier.size(12.dp),
+                    tint = MaterialTheme.colorScheme.tertiary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = valueRange,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${(value * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.width(40.dp),
+                textAlign = TextAlign.End
+            )
+        }
+        if (infoText != null) {
+            Text(
+                text = infoText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 36.dp)
+            )
         }
     }
 }

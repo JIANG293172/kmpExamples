@@ -204,36 +204,154 @@ object PhotoSizes {
 }
 
 /**
- * 背景颜色选项
+ * 背景类型
  */
-enum class BackgroundColor(val displayName: String, val colorValue: Long) {
-    WHITE("白色", 0xFFFFFFFF),
-    BLUE("蓝色", 0xFF2196F3.toLong()),
-    RED("红色", 0xFFE53935.toLong()),
-    LIGHT_BLUE("浅蓝色", 0xFF03A9F4.toLong()),
-    DARK_BLUE("深蓝色", 0xFF1565C0.toLong()),
-    DARK_RED("深红色", 0xFFC62828.toLong()),
-    GRAY("浅灰色", 0xFFF5F5F5.toLong()),
-    GRADIENT_BLUE("渐变蓝", 0xFF1976D2.toLong())
+enum class BackgroundType {
+    SOLID,      // 纯色背景
+    GRADIENT,   // 渐变背景
+    TRANSPARENT // 透明背景
 }
 
 /**
- * 服装模板
+ * 背景颜色选项 - 按需求文档标准色值
+ */
+enum class BackgroundColor(
+    val displayName: String,
+    val colorValue: Long,
+    val rgb: String,
+    val type: BackgroundType = BackgroundType.SOLID,
+    val gradientColors: List<Long>? = null
+) {
+    // 纯色背景 - 官方标准色值
+    WHITE("白色", 0xFFFFFFFF, "255,255,255", BackgroundType.SOLID),
+    RED("红色", 0xFFFF0000, "255,0,0", BackgroundType.SOLID),
+    BLUE("蓝色", 0xFF0099FF, "0,153,255", BackgroundType.SOLID),
+    LIGHT_BLUE("浅蓝色", 0xFF66CCFF, "102,204,255", BackgroundType.SOLID),
+    LIGHT_GRAY("浅灰色", 0xFFE6E6E6, "230,230,230", BackgroundType.SOLID),
+    DARK_RED("深红色", 0xFFCC0000, "204,0,0", BackgroundType.SOLID),
+    DARK_BLUE("深蓝色", 0xFF003399, "0,51,153", BackgroundType.SOLID),
+    PALE_BLUE("苍蓝色", 0xFFBDD7EE, "189,215,238", BackgroundType.SOLID),
+
+    // 渐变背景
+    GRADIENT_BLUE("渐变蓝", 0xFF1976D2, "25,118,210", BackgroundType.GRADIENT, listOf(0xFF1976D2, 0xFF42A5F5)),
+    GRADIENT_RED("渐变红", 0xFFD32F2F, "211,47,47", BackgroundType.GRADIENT, listOf(0xFFD32F2F, 0xFFEF5350)),
+    GRADIENT_PURPLE("渐变紫", 0xFF7B1FA2, "123,31,162", BackgroundType.GRADIENT, listOf(0xFF7B1FA2, 0xFFBA68C8)),
+
+    // 透明背景
+    TRANSPARENT("透明", 0x00000000, "0,0,0,0", BackgroundType.TRANSPARENT);
+
+    companion object {
+        fun getSolidColors() = entries.filter { it.type == BackgroundType.SOLID }
+        fun getGradientColors() = entries.filter { it.type == BackgroundType.GRADIENT }
+        fun getAllColors() = entries
+    }
+}
+
+/**
+ * 裁剪模式
+ */
+enum class CropMode(val displayName: String, val aspectRatio: Float?) {
+    AI_AUTO("AI智能裁剪", null),           // AI自动裁剪，保持原始比例
+    RATIO_LOCKED("比例锁定", null),        // 根据证件照标准比例裁剪
+    FREE("自由裁剪", null);                // 自由比例裁剪
+    ;
+
+    companion object {
+        fun getById(id: String) = entries.find { it.name == id }
+    }
+}
+
+/**
+ * 标准证件照裁剪比例
+ */
+object CropRatios {
+    // 证件照标准比例 (宽度/高度)
+    val ONE_INCH = 25f / 35f       // 一寸照 25x35mm
+    val TWO_INCH = 35f / 49f       // 二寸照 35x49mm
+    val SMALL_ONE_INCH = 22f / 32f // 小一寸 22x32mm
+    val VISA_SQUARE = 1f           // 签证方型 1:1
+    val PASSPORT = 33f / 48f       // 护照 33x48mm
+    val ID_CARD = 26f / 32f        // 身份证 26x32mm
+    val DRIVING_LICENSE = 21f / 26f // 驾驶证 21x26mm
+
+    // 根据尺寸ID获取比例
+    fun getRatioForSize(sizeId: String): Float {
+        return when (sizeId) {
+            "one_inch" -> ONE_INCH
+            "two_inch" -> TWO_INCH
+            "small_one_inch" -> SMALL_ONE_INCH
+            "visa_us", "visa_japan" -> VISA_SQUARE
+            "visa_uk", "visa_schengen" -> 35f / 45f
+            "passport" -> PASSPORT
+            "id_card" -> ID_CARD
+            "driving_license" -> DRIVING_LICENSE
+            "exam_gaokao" -> 30f / 40f
+            "exam_graduate" -> 26f / 32f
+            "exam_civil" -> 35f / 45f
+            "work_general" -> 26f / 32f
+            "work_refined" -> 35f / 45f
+            else -> ONE_INCH
+        }
+    }
+}
+
+/**
+ * 服装类型
+ */
+enum class ClothingType {
+    MEN,    // 男装
+    WOMEN,  // 女装
+    STUDENT // 学生装
+}
+
+/**
+ * 服装模板 - 按需求文档分类
  */
 data class ClothingTemplate(
     val id: String,
     val name: String,
     val description: String,
+    val type: ClothingType,
+    val isFree: Boolean = true,  // 是否免费
     val thumbnailRes: String = ""
 )
 
 object ClothingTemplates {
-    val templates = listOf(
-        ClothingTemplate("suit_man", "男士西装", "正式商务西装"),
-        ClothingTemplate("suit_woman", "女士西装", "职业女性西装"),
-        ClothingTemplate("shirt_white", "白色衬衫", "经典白衬衫"),
-        ClothingTemplate("shirt_blue", "蓝色衬衫", "蓝色商务衬衫"),
-        ClothingTemplate("sweater", "毛衣", "休闲毛衣"),
-        ClothingTemplate("tang", "中山装", "传统中山装")
+    // 免费模板
+    private val freeTemplates = listOf(
+        // 男装免费
+        ClothingTemplate("shirt_white_man", "白色衬衫", "经典白衬衫", ClothingType.MEN, true),
+        ClothingTemplate("shirt_blue_man", "浅蓝衬衫", "蓝色商务衬衫", ClothingType.MEN, true),
+        // 女装免费
+        ClothingTemplate("shirt_white_woman", "白色衬衫", "经典白衬衫", ClothingType.WOMEN, true),
+        ClothingTemplate("shirt_blue_woman", "浅蓝衬衫", "蓝色商务衬衫", ClothingType.WOMEN, true),
+        // 学生装免费
+        ClothingTemplate("student_white", "学生白衬衫", "学院风白衬衫", ClothingType.STUDENT, true),
+        ClothingTemplate("student_collar", "娃娃领衬衫", "甜美娃娃领", ClothingType.STUDENT, true)
     )
+
+    // 付费/会员模板
+    private val premiumTemplates = listOf(
+        // 男装付费
+        ClothingTemplate("suit_man", "男士西装", "正式商务西装", ClothingType.MEN, false),
+        ClothingTemplate("suit_tie_man", "西装+领带", "领带正装", ClothingType.MEN, false),
+        ClothingTemplate("zhongshan", "中山装", "传统中山装", ClothingType.MEN, false),
+        // 女装付费
+        ClothingTemplate("suit_woman", "女士西装", "职业女性西装", ClothingType.WOMEN, false),
+        ClothingTemplate("suit_bow_woman", "西装+领结", "精致领结装", ClothingType.WOMEN, false),
+        ClothingTemplate("turtleneck", "高领毛衣", "优雅高领", ClothingType.WOMEN, false),
+        ClothingTemplate("blazer", "轻便西装", "休闲西装外套", ClothingType.WOMEN, false)
+    )
+
+    val allTemplates = freeTemplates + premiumTemplates
+
+    val templates = allTemplates
+
+    fun getByType(type: ClothingType) = allTemplates.filter { it.type == type }
+
+    fun getFreeTemplates() = freeTemplates
+
+    fun getPremiumTemplates() = premiumTemplates
+
+    fun getById(id: String) = allTemplates.find { it.id == id }
 }

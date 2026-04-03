@@ -301,7 +301,7 @@ private fun ColorChip(
             Icon(
                 Icons.Default.Check,
                 contentDescription = "选中",
-                tint = if (color == BackgroundColor.WHITE || color == BackgroundColor.GRAY)
+                tint = if (color == BackgroundColor.WHITE || color == BackgroundColor.LIGHT_GRAY)
                     Color.Black else Color.White,
                 modifier = Modifier.size(20.dp)
             )

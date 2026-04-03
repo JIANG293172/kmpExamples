@@ -12,6 +12,8 @@ import shared.ui.screens.home.HomeScreen
 import shared.ui.screens.home.SizeSelectScreen
 import shared.ui.screens.home.PhotoEditorScreen
 import shared.ui.screens.home.PhotoResultScreen
+import shared.ui.screens.home.CropScreen
+import shared.ui.screens.home.CropResult
 import shared.ui.screens.tools.ToolsScreen
 import shared.ui.screens.explore.ExploreScreen
 import shared.ui.screens.profile.ProfileScreen
@@ -25,6 +27,7 @@ enum class Screen {
     SizeSelect,
     PhotoEditor,
     PhotoResult,
+    Crop,
     Tools,
     Explore,
     Profile
@@ -53,6 +56,10 @@ class AppState {
         private set
 
     var editedPhotoUri by mutableStateOf<String?>(null)
+        private set
+
+    // 裁剪结果
+    var cropResult by mutableStateOf<CropResult?>(null)
         private set
 
     // Bottom navigation index
@@ -95,6 +102,19 @@ class AppState {
 
     fun onNavigateToResult() {
         currentScreen = Screen.PhotoResult
+    }
+
+    fun onNavigateToCrop() {
+        currentScreen = Screen.Crop
+    }
+
+    fun onCropComplete(result: CropResult) {
+        cropResult = result
+        currentScreen = Screen.PhotoEditor
+    }
+
+    fun onBackFromCrop() {
+        currentScreen = Screen.PhotoEditor
     }
 
     fun onBackFromEditor() {
@@ -168,13 +188,21 @@ fun App(
             PhotoEditorScreen(
                 state = state,
                 onBack = { state.onBackFromEditor() },
-                onDone = { state.onNavigateToResult() }
+                onDone = { state.onNavigateToResult() },
+                onCropClick = { state.onNavigateToCrop() }
             )
         }
         Screen.PhotoResult -> {
             PhotoResultScreen(
                 state = state,
                 onBack = { state.onBackFromResult() }
+            )
+        }
+        Screen.Crop -> {
+            CropScreen(
+                state = state,
+                onBack = { state.onBackFromCrop() },
+                onDone = { result -> state.onCropComplete(result) }
             )
         }
         Screen.Tools -> {
