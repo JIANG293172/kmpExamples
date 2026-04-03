@@ -58,6 +58,14 @@ class AppState {
     var editedPhotoUri by mutableStateOf<String?>(null)
         private set
 
+    // 原始照片字节数据（用于实际处理）
+    var originalPhotoData by mutableStateOf<ByteArray?>(null)
+        private set
+
+    // 处理后的照片字节数据
+    var processedPhotoData by mutableStateOf<ByteArray?>(null)
+        private set
+
     // 裁剪结果
     var cropResult by mutableStateOf<CropResult?>(null)
         private set
@@ -65,6 +73,40 @@ class AppState {
     // Bottom navigation index
     var bottomNavIndex by mutableStateOf(0)
         private set
+
+    // 处理状态
+    var isProcessing by mutableStateOf(false)
+        private set
+
+    // Image picker launcher - set by platform-specific code
+    var imagePickerLauncher by mutableStateOf<(() -> Unit)?>(null)
+        private set
+
+    // 待处理的照片尺寸（在选择照片之前先选择尺寸）
+    var pendingPhotoSize by mutableStateOf<PhotoSize?>(null)
+        private set
+
+    /**
+     * 设置图片选择器启动器
+     * 需要在平台特定代码中调用以设置实际的选择器
+     */
+    fun setupImagePickerLauncher(launcher: (() -> Unit)?) {
+        imagePickerLauncher = launcher
+    }
+
+    /**
+     * 触发图片选择器
+     */
+    fun triggerImagePicker() {
+        imagePickerLauncher?.invoke()
+    }
+
+    /**
+     * 设置待处理的照片尺寸
+     */
+    fun selectPhotoSize(size: PhotoSize) {
+        pendingPhotoSize = size
+    }
 
     fun onLoginSuccess(user: String) {
         username = user
@@ -94,6 +136,29 @@ class AppState {
     fun onPhotoSelected(uri: String) {
         hasSelectedPhoto = true
         editedPhotoUri = uri
+    }
+
+    /**
+     * 设置原始照片数据（字节数组）
+     */
+    fun updateOriginalPhotoData(data: ByteArray?) {
+        originalPhotoData = data
+        processedPhotoData = data
+        hasSelectedPhoto = data != null
+    }
+
+    /**
+     * 更新处理后的照片数据
+     */
+    fun updateProcessedPhotoData(data: ByteArray?) {
+        processedPhotoData = data
+    }
+
+    /**
+     * 设置处理状态
+     */
+    fun updateProcessing(processing: Boolean) {
+        isProcessing = processing
     }
 
     fun onPhotoEdited(uri: String) {
@@ -130,6 +195,8 @@ class AppState {
         selectedPhotoSize = null
         hasSelectedPhoto = false
         editedPhotoUri = null
+        originalPhotoData = null
+        processedPhotoData = null
     }
 
     fun onBottomNavChange(index: Int) {
@@ -157,6 +224,16 @@ class AppState {
         currentScreen = Screen.Profile
         bottomNavIndex = 3
     }
+
+    /**
+     * 清除照片数据
+     */
+    fun clearPhotoData() {
+        originalPhotoData = null
+        processedPhotoData = null
+        hasSelectedPhoto = false
+        editedPhotoUri = null
+    }
 }
 
 /**
@@ -181,7 +258,8 @@ fun App(
         Screen.SizeSelect -> {
             SizeSelectScreen(
                 state = state,
-                onBack = { state.onBackFromEditor() }
+                onBack = { state.onBackFromEditor() },
+                onPickImage = { state.triggerImagePicker() }
             )
         }
         Screen.PhotoEditor -> {

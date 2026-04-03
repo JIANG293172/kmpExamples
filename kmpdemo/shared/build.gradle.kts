@@ -39,6 +39,8 @@ kotlin {
                 implementation(compose.ui)
                 implementation(compose.material3)
                 implementation("androidx.activity:activity-compose:1.8.2")
+                // ExifInterface for orientation correction
+                implementation("androidx.exifinterface:exifinterface:1.3.7")
             }
         }
 

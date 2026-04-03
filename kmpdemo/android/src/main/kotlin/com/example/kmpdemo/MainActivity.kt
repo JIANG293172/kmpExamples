@@ -5,9 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import shared.navigation.App
-import shared.navigation.AppState
 import shared.navigation.rememberAppState
 import shared.ui.theme.AppTheme
+import shared.imageprocessing.rememberImagePickerLauncher
+import shared.data.PhotoSizes
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -15,7 +16,24 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AppTheme {
-                App(state = rememberAppState())
+                val state = rememberAppState()
+
+                // 设置图片选择器
+                val launchImagePicker = rememberImagePickerLauncher(
+                    onImageSelected = { imageData ->
+                        if (imageData != null) {
+                            state.updateOriginalPhotoData(imageData)
+                            // 使用待处理的尺寸导航到编辑器
+                            val sizeToUse = state.pendingPhotoSize ?: PhotoSizes.allSizes.first()
+                            state.onSizeSelected(sizeToUse)
+                        }
+                    }
+                )
+
+                // 将图片选择器启动器设置到 AppState
+                state.setupImagePickerLauncher(launchImagePicker)
+
+                App(state = state)
             }
         }
     }

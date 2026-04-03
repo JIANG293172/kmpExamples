@@ -25,7 +25,8 @@ import shared.navigation.AppState
 @Composable
 fun SizeSelectScreen(
     state: AppState,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onPickImage: () -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf<SizeCategory?>(null) }
     var selectedBackground by remember { mutableStateOf(BackgroundColor.WHITE) }
@@ -36,7 +37,7 @@ fun SizeSelectScreen(
                 title = { Text("选择证件照尺寸") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -88,11 +89,12 @@ fun SizeSelectScreen(
                             size = size,
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                state.onSizeSelected(size)
+                                // 先保存选中的尺寸到AppState，然后触发图片选择
+                                state.selectPhotoSize(size)
+                                onPickImage()
                             }
                         )
                     }
-                    // 如果只有一项，补齐空白
                     if (rowSizes.size == 1) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
@@ -122,7 +124,7 @@ fun SizeSelectScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { /* 模拟选择照片 */ },
+                        onClick = { onPickImage() },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Default.PhotoLibrary, contentDescription = null)
@@ -130,7 +132,7 @@ fun SizeSelectScreen(
                         Text("相册选择")
                     }
                     Button(
-                        onClick = { /* 模拟拍照 */ },
+                        onClick = { onPickImage() },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Default.CameraAlt, contentDescription = null)

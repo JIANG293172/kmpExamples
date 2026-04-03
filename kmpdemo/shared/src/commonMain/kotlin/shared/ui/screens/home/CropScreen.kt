@@ -1,6 +1,7 @@
 package shared.ui.screens.home
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -24,14 +25,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import shared.data.CropMode
 import shared.data.CropRatios
 import shared.data.PhotoSize
+import shared.imageprocessing.CropParams
+import shared.imageprocessing.ImageProcessor
 import shared.navigation.AppState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -48,6 +57,43 @@ private fun Float.formatString(decimals: Int): String {
     return "$whole.${frac.toString().padStart(decimals, '0')}"
 }
 
+/**
+ * 裁剪照片预览组件 - 占位符
+ * 实际图片显示由各平台特定实现处理
+ */
+@Composable
+private fun CropPhotoPreview(
+    imageData: ByteArray?,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        if (imageData != null) {
+            // TODO: 平台特定实现图片显示
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.Face,
+                    contentDescription = "待裁剪照片",
+                    modifier = Modifier.size(120.dp),
+                    tint = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "待裁剪照片",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray
+                )
+            }
+        } else {
+            PlaceholderCrop()
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CropScreen(
@@ -62,10 +108,69 @@ fun CropScreen(
     var scale by remember { mutableFloatStateOf(1f) }     // 缩放 0.5x ~ 2.0x
     var offset by remember { mutableStateOf(Offset.Zero) } // 拖动偏移
 
-    // 计算裁剪比例
+    var isProcessing by remember { mutableStateOf(false) }
+
+    // ViewModel for image processing
+    val processingScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main) }
+    val processor = remember { ImageProcessor() }
+
+    // Initialize processor
+    LaunchedEffect(Unit) {
+        processor.initialize()
+    }
+
+    // Calculate aspect ratio
     val aspectRatio = photoSize?.let {
         CropRatios.getRatioForSize(it.id)
     } ?: CropRatios.ONE_INCH
+
+    // Cleanup
+    DisposableEffect(Unit) {
+        onDispose {
+            processor.release()
+        }
+    }
+
+    // Apply crop when done
+    fun applyCrop() {
+        val originalData = state.originalPhotoData ?: return
+        isProcessing = true
+
+        processingScope.launch {
+            val params = CropParams(
+                x = 0, // 这些会在处理器中根据AI计算
+                y = 0,
+                width = photoSize?.widthPx ?: 295,
+                height = photoSize?.heightPx ?: 413,
+                rotation = rotation,
+                scale = scale
+            )
+
+            val result = processor.crop(originalData, params)
+            isProcessing = false
+
+            if (result.success && result.data != null) {
+                state.updateProcessedPhotoData(result.data)
+                // 同时更新裁剪结果
+                onDone(CropResult(
+                    rotation = rotation,
+                    scale = scale,
+                    offset = offset,
+                    mode = cropMode,
+                    aspectRatio = aspectRatio
+                ))
+            } else {
+                // 即使失败也返回结果
+                onDone(CropResult(
+                    rotation = rotation,
+                    scale = scale,
+                    offset = offset,
+                    mode = cropMode,
+                    aspectRatio = aspectRatio
+                ))
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -77,6 +182,14 @@ fun CropScreen(
                     }
                 },
                 actions = {
+                    // 处理中的指示器
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                     TextButton(onClick = {
                         // 重置所有调整
                         rotation = 0f
@@ -85,15 +198,10 @@ fun CropScreen(
                     }) {
                         Text("重置")
                     }
-                    TextButton(onClick = {
-                        onDone(CropResult(
-                            rotation = rotation,
-                            scale = scale,
-                            offset = offset,
-                            mode = cropMode,
-                            aspectRatio = aspectRatio
-                        ))
-                    }) {
+                    TextButton(
+                        onClick = { applyCrop() },
+                        enabled = !isProcessing && state.originalPhotoData != null
+                    ) {
                         Text("完成", color = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -119,6 +227,7 @@ fun CropScreen(
                     offset = offset,
                     aspectRatio = aspectRatio,
                     cropMode = cropMode,
+                    imageData = state.originalPhotoData,
                     onTransform = { newScale, newOffset, newRotation ->
                         // 限制范围
                         scale = newScale.coerceIn(0.5f, 2.0f)
@@ -197,6 +306,7 @@ private fun CropPreview(
     offset: Offset,
     aspectRatio: Float,
     cropMode: CropMode,
+    imageData: ByteArray?,
     onTransform: (Float, Offset, Float) -> Unit
 ) {
     var currentScale by remember { mutableFloatStateOf(scale) }
@@ -209,19 +319,18 @@ private fun CropPreview(
             .padding(32.dp),
         contentAlignment = Alignment.Center
     ) {
-        // 照片区域（模拟）
+        // 照片预览（带变换）
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.8f)
-                .aspectRatio(1f / aspectRatio)
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFFE0E0E0),
-                            Color(0xFFBDBDBD)
-                        )
-                    )
-                )
+                .aspectRatio(1f / aspectRatio.coerceIn(0.5f, 2f))
+                .graphicsLayer {
+                    scaleX = currentScale
+                    scaleY = currentScale
+                    rotationZ = currentRotation
+                    translationX = currentOffset.x
+                    translationY = currentOffset.y
+                }
                 .pointerInput(Unit) {
                     detectTransformGestures { centroid, pan, zoom, rotationDelta ->
                         currentScale = (currentScale * zoom).coerceIn(0.5f, 2.0f)
@@ -231,20 +340,11 @@ private fun CropPreview(
                     }
                 }
         ) {
-            // 人脸占位符
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Face,
-                    contentDescription = null,
-                    modifier = Modifier.size(120.dp),
-                    tint = Color.Gray
-                )
-            }
+            // 显示实际图片或占位符
+            CropPhotoPreview(
+                imageData = imageData,
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         // 裁剪框
@@ -256,7 +356,7 @@ private fun CropPreview(
 
             // 计算裁剪框尺寸（保持比例）
             val cropWidth = canvasWidth * 0.7f
-            val cropHeight = cropWidth / aspectRatio
+            val cropHeight = cropWidth / aspectRatio.coerceIn(0.5f, 2f)
 
             val left = (canvasWidth - cropWidth) / 2
             val top = (canvasHeight - cropHeight) / 2
@@ -321,6 +421,40 @@ private fun CropPreview(
                     center = corner
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PlaceholderCrop() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFFE0E0E0),
+                        Color(0xFFBDBDBD)
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.Face,
+                contentDescription = null,
+                modifier = Modifier.size(120.dp),
+                tint = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "待裁剪照片",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray
+            )
         }
     }
 }

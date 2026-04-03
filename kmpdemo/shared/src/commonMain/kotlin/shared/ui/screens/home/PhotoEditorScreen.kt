@@ -1,12 +1,13 @@
 package shared.ui.screens.home
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,7 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -26,7 +29,65 @@ import shared.data.BackgroundType
 import shared.data.ClothingTemplate
 import shared.data.ClothingTemplates
 import shared.data.ClothingType
+import shared.imageprocessing.CropParams
+import shared.imageprocessing.EnhanceParams
+import shared.imageprocessing.ImageLoader
+import shared.imageprocessing.ImageProcessor
+import shared.imageprocessing.PhotoEditorViewModel
+import shared.imageprocessing.createImageLoader
 import shared.navigation.AppState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlin.math.pow
+import kotlin.math.roundToInt
+
+/**
+ * 处理后照片的预览组件 - 各平台特定实现
+ * 这里提供一个占位符，实际显示由平台特定代码处理
+ */
+@Composable
+private fun ProcessedPhotoPreview(
+    imageData: ByteArray?,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        if (imageData != null) {
+            // TODO: 平台特定实现图片显示
+            // 目前显示一个加载指示器
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.Image,
+                    contentDescription = "处理后的照片",
+                    modifier = Modifier.size(64.dp),
+                    tint = Color.White
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "照片已处理",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+            }
+        } else {
+            PlaceholderContent()
+        }
+    }
+}
+
+private fun Float.formatString(decimals: Int): String {
+    val factor = 10.0.pow(decimals).toInt()
+    val scaled = (this * factor).roundToInt()
+    val whole = scaled / factor
+    val frac = scaled % factor
+    return "$whole.${frac.toString().padStart(decimals, '0')}"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +116,118 @@ fun PhotoEditorScreen(
     var eyeEnlarge by remember { mutableFloatStateOf(0f) }
     var eyeBrighten by remember { mutableFloatStateOf(0f) }
 
+    // 处理相关
+    var isProcessing by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // ViewModel for image processing
+    val processingScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main) }
+    val processor = remember { ImageProcessor() }
+    val imageLoader = remember { createImageLoader() }
+
+    // Load image from URI when available
+    LaunchedEffect(state.editedPhotoUri) {
+        state.editedPhotoUri?.let { uri ->
+            processingScope.launch {
+                val imageData = imageLoader.loadFromUri(uri)
+                if (imageData != null) {
+                    state.updateOriginalPhotoData(imageData)
+                }
+            }
+        }
+    }
+
+    // Initialize processor
+    LaunchedEffect(Unit) {
+        processor.initialize()
+    }
+
+    // 清理
+    DisposableEffect(Unit) {
+        onDispose {
+            processor.release()
+        }
+    }
+
+    // Process photo with selected background
+    fun processPhoto() {
+        val originalData = state.originalPhotoData ?: return
+        isProcessing = true
+        errorMessage = null
+
+        processingScope.launch {
+            val result = processor.process证件照(originalData, selectedBackground)
+            isProcessing = false
+            if (result.success && result.data != null) {
+                state.updateProcessedPhotoData(result.data)
+            } else {
+                errorMessage = result.errorMessage ?: "处理失败"
+            }
+        }
+    }
+
+    // Apply enhancement
+    fun applyEnhancement() {
+        val imageData = state.processedPhotoData ?: state.originalPhotoData ?: return
+        isProcessing = true
+        errorMessage = null
+
+        processingScope.launch {
+            val params = EnhanceParams(
+                brightness = brightness,
+                contrast = contrast,
+                sharpness = sharpness,
+                denoise = denoise,
+                exposure = exposure
+            )
+            val result = processor.enhance(imageData, params)
+            isProcessing = false
+            if (result.success && result.data != null) {
+                state.updateProcessedPhotoData(result.data)
+            } else {
+                errorMessage = result.errorMessage ?: "美化处理失败"
+            }
+        }
+    }
+
+    // Complete processing
+    fun processComplete() {
+        val originalData = state.originalPhotoData ?: return
+        isProcessing = true
+        errorMessage = null
+
+        processingScope.launch {
+            val cropParams = state.cropResult?.let {
+                CropParams(
+                    x = 0, y = 0,
+                    width = 0, height = 0,
+                    rotation = it.rotation,
+                    scale = it.scale
+                )
+            }
+            val enhanceParams = EnhanceParams(
+                brightness = brightness,
+                contrast = contrast,
+                sharpness = sharpness,
+                denoise = denoise,
+                exposure = exposure
+            )
+            val result = processor.processComplete(
+                originalData,
+                selectedBackground,
+                cropParams,
+                enhanceParams
+            )
+            isProcessing = false
+            if (result.success && result.data != null) {
+                state.updateProcessedPhotoData(result.data)
+                onDone()
+            } else {
+                errorMessage = result.errorMessage ?: "处理失败"
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -65,10 +238,21 @@ fun PhotoEditorScreen(
                     }
                 },
                 actions = {
+                    // 处理中的指示器
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                     IconButton(onClick = onCropClick) {
                         Icon(Icons.Default.Crop, contentDescription = "裁剪")
                     }
-                    TextButton(onClick = onDone) {
+                    TextButton(
+                        onClick = { processComplete() },
+                        enabled = !isProcessing && state.originalPhotoData != null
+                    ) {
                         Text("完成", color = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -88,11 +272,47 @@ fun PhotoEditorScreen(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                PhotoPreview(
+                PhotoPreviewWithProcessing(
                     backgroundColor = selectedBackground,
                     backgroundType = selectedBackgroundType,
-                    hasPhoto = state.hasSelectedPhoto
+                    hasPhoto = state.originalPhotoData != null,
+                    processedImageData = state.processedPhotoData,
+                    isProcessing = isProcessing
                 )
+            }
+
+            // 错误提示
+            errorMessage?.let { error ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Error,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { errorMessage = null }) {
+                            Icon(Icons.Default.Close, "关闭")
+                        }
+                    }
+                }
             }
 
             // 编辑工具区域
@@ -134,8 +354,14 @@ fun PhotoEditorScreen(
                         0 -> BackgroundTab(
                             selected = selectedBackground,
                             selectedType = selectedBackgroundType,
-                            onSelect = { selectedBackground = it },
-                            onTypeSelect = { selectedBackgroundType = it }
+                            onSelect = {
+                                selectedBackground = it
+                                if (state.originalPhotoData != null) {
+                                    processPhoto()
+                                }
+                            },
+                            onTypeSelect = { selectedBackgroundType = it },
+                            enabled = state.originalPhotoData != null && !isProcessing
                         )
                         1 -> ClothingTab(
                             selected = selectedClothing,
@@ -167,7 +393,9 @@ fun PhotoEditorScreen(
                                 contrast = 0.1f
                                 sharpness = 0.2f
                                 exposure = 0.05f
-                            }
+                            },
+                            onApply = { applyEnhancement() },
+                            enabled = state.originalPhotoData != null && !isProcessing
                         )
                     }
                 }
@@ -177,10 +405,12 @@ fun PhotoEditorScreen(
 }
 
 @Composable
-private fun PhotoPreview(
+private fun PhotoPreviewWithProcessing(
     backgroundColor: BackgroundColor,
     backgroundType: BackgroundType,
-    hasPhoto: Boolean
+    hasPhoto: Boolean,
+    processedImageData: ByteArray?,
+    isProcessing: Boolean
 ) {
     val backgroundModifier = when (backgroundType) {
         BackgroundType.SOLID -> Modifier.background(Color(backgroundColor.colorValue))
@@ -204,61 +434,57 @@ private fun PhotoPreview(
             .then(backgroundModifier),
         contentAlignment = Alignment.Center
     ) {
-        if (hasPhoto) {
-            // 模拟照片内容
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Default.Face,
-                        contentDescription = null,
-                        modifier = Modifier.size(120.dp),
-                        tint = Color.White.copy(alpha = 0.8f)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "证件照预览",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
+        when {
+            isProcessing -> {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
             }
-        } else {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    Icons.Default.AddAPhoto,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = if (backgroundType == BackgroundType.TRANSPARENT ||
-                        backgroundColor == BackgroundColor.WHITE ||
-                        backgroundColor == BackgroundColor.LIGHT_GRAY)
-                        Color.Gray else Color.White.copy(alpha = 0.5f)
+            processedImageData != null -> {
+                // 显示处理后的图片 - 由于平台差异，暂时使用占位符
+                // 实际图片显示由各平台特定实现处理
+                ProcessedPhotoPreview(
+                    imageData = processedImageData,
+                    modifier = Modifier.fillMaxSize()
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "请选择或拍摄照片",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (backgroundType == BackgroundType.TRANSPARENT ||
-                        backgroundColor == BackgroundColor.WHITE ||
-                        backgroundColor == BackgroundColor.LIGHT_GRAY)
-                        Color.Gray else Color.White.copy(alpha = 0.7f)
+            }
+            hasPhoto -> {
+                // 照片加载中或正在处理
+                CircularProgressIndicator(
+                    color = Color.White,
+                    modifier = Modifier.size(48.dp)
                 )
+            }
+            else -> {
+                PlaceholderContent()
             }
         }
     }
 }
 
 @Composable
+private fun PlaceholderContent() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            Icons.Default.AddAPhoto,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "请选择或拍摄照片",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.Gray
+        )
+    }
+}
+
+@Composable
 private fun checkerboardPattern(): Brush {
-    // 棋盘格背景表示透明
     return Brush.linearGradient(
         colors = listOf(
             Color.LightGray,
@@ -273,7 +499,8 @@ private fun BackgroundTab(
     selected: BackgroundColor,
     selectedType: BackgroundType,
     onSelect: (BackgroundColor) -> Unit,
-    onTypeSelect: (BackgroundType) -> Unit
+    onTypeSelect: (BackgroundType) -> Unit,
+    enabled: Boolean = true
 ) {
     var showCustomBackgroundDialog by remember { mutableStateOf(false) }
 
@@ -299,21 +526,24 @@ private fun BackgroundTab(
                 icon = Icons.Default.Square,
                 isSelected = selectedType == BackgroundType.SOLID,
                 onClick = { onTypeSelect(BackgroundType.SOLID) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = enabled
             )
             BackgroundTypeChip(
                 label = "渐变",
                 icon = Icons.Default.Gradient,
                 isSelected = selectedType == BackgroundType.GRADIENT,
                 onClick = { onTypeSelect(BackgroundType.GRADIENT) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = enabled
             )
             BackgroundTypeChip(
                 label = "透明",
                 icon = Icons.Default.Layers,
                 isSelected = selectedType == BackgroundType.TRANSPARENT,
                 onClick = { onTypeSelect(BackgroundType.TRANSPARENT) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = enabled
             )
         }
 
@@ -341,14 +571,15 @@ private fun BackgroundTab(
                     color = color,
                     backgroundType = selectedType,
                     isSelected = selected == color,
-                    onClick = { onSelect(color) }
+                    onClick = { if (enabled) onSelect(color) }
                 )
             }
 
             // 自定义颜色按钮
             item {
                 CustomBackgroundItem(
-                    onClick = { showCustomBackgroundDialog = true }
+                    onClick = { showCustomBackgroundDialog = true },
+                    enabled = enabled
                 )
             }
         }
@@ -399,7 +630,7 @@ private fun BackgroundTab(
         }
     }
 
-    // 自定义颜色对话框（简化版）
+    // 自定义颜色对话框
     if (showCustomBackgroundDialog) {
         AlertDialog(
             onDismissRequest = { showCustomBackgroundDialog = false },
@@ -413,7 +644,7 @@ private fun BackgroundTab(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedButton(
-                            onClick = { /* 选择纯色 */ },
+                            onClick = { /* TODO: 选择纯色 */ },
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Default.Square, null)
@@ -421,7 +652,7 @@ private fun BackgroundTab(
                             Text("纯色")
                         }
                         OutlinedButton(
-                            onClick = { /* 从相册选择 */ },
+                            onClick = { /* TODO: 从相册选择 */ },
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Default.Image, null)
@@ -446,7 +677,8 @@ private fun BackgroundTypeChip(
     icon: ImageVector,
     isSelected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     FilterChip(
         selected = isSelected,
@@ -455,7 +687,8 @@ private fun BackgroundTypeChip(
         leadingIcon = {
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         },
-        modifier = modifier
+        modifier = modifier,
+        enabled = enabled
     )
 }
 
@@ -527,7 +760,8 @@ private fun BackgroundColorItem(
 
 @Composable
 private fun CustomBackgroundItem(
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
@@ -542,7 +776,7 @@ private fun CustomBackgroundItem(
                     color = MaterialTheme.colorScheme.outline,
                     shape = RoundedCornerShape(12.dp)
                 )
-                .clickable(onClick = onClick),
+                .clickable(enabled = enabled, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -835,7 +1069,9 @@ private fun EnhanceTab(
     onFaceSlimChange: (Float) -> Unit,
     onEyeEnlargeChange: (Float) -> Unit,
     onEyeBrightenChange: (Float) -> Unit,
-    onAutoEnhance: () -> Unit
+    onAutoEnhance: () -> Unit,
+    onApply: () -> Unit,
+    enabled: Boolean = true
 ) {
     var showAdvanced by remember { mutableStateOf(false) }
 
@@ -859,7 +1095,8 @@ private fun EnhanceTab(
             value = exposure,
             onValueChange = onExposureChange,
             valueRange = -0.2f..0.2f,
-            infoText = "自动校正亮度 ±20%"
+            infoText = "自动校正亮度 ±20%",
+            enabled = enabled
         )
 
         // 亮度
@@ -868,7 +1105,8 @@ private fun EnhanceTab(
             label = "亮度",
             value = brightness,
             onValueChange = onBrightnessChange,
-            valueRange = -1f..1f
+            valueRange = -1f..1f,
+            enabled = enabled
         )
 
         // 对比度
@@ -878,7 +1116,8 @@ private fun EnhanceTab(
             value = contrast,
             onValueChange = onContrastChange,
             valueRange = -1f..1f,
-            infoText = "自动优化 ±15%"
+            infoText = "自动优化 ±15%",
+            enabled = enabled
         )
 
         // 锐化
@@ -888,7 +1127,8 @@ private fun EnhanceTab(
             value = sharpness,
             onValueChange = onSharpnessChange,
             valueRange = 0f..1f,
-            infoText = "0.1~0.3 轻度增强五官"
+            infoText = "0.1~0.3 轻度增强五官",
+            enabled = enabled
         )
 
         // 降噪
@@ -898,7 +1138,8 @@ private fun EnhanceTab(
             value = denoise,
             onValueChange = onDenoiseChange,
             valueRange = 0f..1f,
-            infoText = "去除夜间噪点"
+            infoText = "去除夜间噪点",
+            enabled = enabled
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1020,17 +1261,28 @@ private fun EnhanceTab(
                     onDenoiseChange(0f)
                     onExposureChange(0f)
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = enabled
             ) {
                 Text("重置")
             }
             Button(
                 onClick = onAutoEnhance,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = enabled
             ) {
                 Icon(Icons.Default.AutoFixHigh, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("自动增强")
+            }
+            Button(
+                onClick = onApply,
+                modifier = Modifier.weight(1f),
+                enabled = enabled
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("应用")
             }
         }
     }
@@ -1044,7 +1296,8 @@ private fun EnhanceSlider(
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
     infoText: String? = null,
-    isPremium: Boolean = false
+    isPremium: Boolean = false,
+    enabled: Boolean = true
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -1078,7 +1331,8 @@ private fun EnhanceSlider(
                 value = value,
                 onValueChange = onValueChange,
                 valueRange = valueRange,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = enabled
             )
             Text(
                 text = "${(value * 100).toInt()}%",
