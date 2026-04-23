@@ -91,6 +91,7 @@ class AppState {
      * 需要在平台特定代码中调用以设置实际的选择器
      */
     fun setupImagePickerLauncher(launcher: (() -> Unit)?) {
+        println("DEBUG: setupImagePickerLauncher called with ${if (launcher != null) "NOT NULL" else "NULL"}")
         imagePickerLauncher = launcher
     }
 
@@ -98,6 +99,7 @@ class AppState {
      * 触发图片选择器
      */
     fun triggerImagePicker() {
+        println("DEBUG: triggerImagePicker called, launcher is ${if (imagePickerLauncher != null) "NOT NULL" else "NULL"}")
         imagePickerLauncher?.invoke()
     }
 

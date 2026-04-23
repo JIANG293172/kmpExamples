@@ -10,17 +10,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
-actual object ImagePickerHelper {
-
-    actual fun pickImage(onResult: (ByteArray?) -> Unit) {
-        // 这个方法需要在Composable环境中调用
-        // 实际实现在 rememberLauncher 中
-        onResult(null)
-    }
-}
-
+/**
+ * Android implementation of PhotoPickerLauncher using ActivityResultContracts
+ */
 @Composable
-fun rememberImagePickerLauncher(
+actual fun rememberPhotoPickerLauncher(
     onImageSelected: (ByteArray?) -> Unit
 ): () -> Unit {
     val context = LocalContext.current
@@ -41,33 +35,24 @@ fun rememberImagePickerLauncher(
 
 private fun loadImageFromUri(context: Context, uri: Uri): ByteArray? {
     return try {
-        // 尝试获取持久化读取权限（支持 Android 10+ 的 content URI）
+        // Try to get persistent URI permission
         try {
             val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
             context.contentResolver.takePersistableUriPermission(uri, flags)
         } catch (e: SecurityException) {
-            // 如果无法获取持久化权限，则使用临时权限继续
-            android.util.Log.d("ImagePicker", "无法获取持久化权限，使用临时权限")
+            // Fall back to temporary permission
         }
 
-        // 打开输入流并读取图片
         context.contentResolver.openInputStream(uri)?.use { inputStream ->
-            // 首先解码为 Bitmap
             val bitmap = BitmapFactory.decodeStream(inputStream)
             if (bitmap != null) {
-                // 转换为字节数组
                 val outputStream = java.io.ByteArrayOutputStream()
-                // 使用 JPEG 格式压缩，质量 95%
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
                 bitmap.recycle()
                 outputStream.toByteArray()
-            } else {
-                // 如果 BitmapFactory.decodeStream 失败，尝试使用 Options
-                null
-            }
+            } else null
         }
     } catch (e: Exception) {
-        android.util.Log.e("ImagePicker", "加载图片失败: ${e.message}")
         e.printStackTrace()
         null
     }

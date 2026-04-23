@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.LaunchedEffect
 import shared.navigation.App
 import shared.navigation.rememberAppState
 import shared.ui.theme.AppTheme
@@ -30,8 +31,10 @@ class MainActivity : ComponentActivity() {
                     }
                 )
 
-                // 将图片选择器启动器设置到 AppState
-                state.setupImagePickerLauncher(launchImagePicker)
+                // 将图片选择器启动器设置到 AppState（只在首次组合时执行）
+                LaunchedEffect(Unit) {
+                    state.setupImagePickerLauncher(launchImagePicker)
+                }
 
                 App(state = state)
             }

@@ -1,9 +1,19 @@
 package shared.imageprocessing
 
-actual object ImagePickerHelper {
+import kotlinx.cinterop.ExperimentalForeignApi
 
+/**
+ * iOS implementation of ImagePickerHelper
+ *
+ * Uses file-based IPC to communicate with Swift photo picker in iosApp.
+ * Kotlin creates trigger file -> Swift detects it -> Swift shows picker ->
+ * Swift saves image to result file -> Kotlin reads result and calls callback.
+ */
+@OptIn(ExperimentalForeignApi::class)
+actual object ImagePickerHelper {
     actual fun pickImage(onResult: (ByteArray?) -> Unit) {
-        // iOS实现需要在原生代码中处理
-        onResult(null)
+        // Use IosPhotoLibraryAccess for file-based picker communication
+        // This creates trigger file, polls for result, and calls callback with image data
+        IosPhotoLibraryAccess.presentPicker(onResult)
     }
 }

@@ -112,16 +112,8 @@ fun LoginScreen(
 
                 Button(
                     onClick = {
-                        if (username.isEmpty() || password.isEmpty()) {
-                            errorMessage = "请输入用户名和密码"
-                            return@Button
-                        }
-
-                        if (username == "jiang" && password == "tao") {
-                            onLoginSuccess(username)
-                        } else {
-                            errorMessage = "用户名或密码错误"
-                        }
+                        // 直接登录成功
+                        onLoginSuccess(username.ifEmpty { "用户" })
                     },
                     modifier = Modifier
                         .fillMaxWidth()

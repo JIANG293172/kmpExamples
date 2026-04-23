@@ -35,6 +35,8 @@ import shared.imageprocessing.ImageLoader
 import shared.imageprocessing.ImageProcessor
 import shared.imageprocessing.PhotoEditorViewModel
 import shared.imageprocessing.createImageLoader
+import shared.imageprocessing.rememberImageBitmap
+import shared.ui.components.NativeImageDisplay
 import shared.navigation.AppState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,39 +46,27 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * 处理后照片的预览组件 - 各平台特定实现
- * 这里提供一个占位符，实际显示由平台特定代码处理
+ * 处理后照片的预览组件
  */
 @Composable
 private fun ProcessedPhotoPreview(
     imageData: ByteArray?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
 ) {
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
         if (imageData != null) {
-            // TODO: 平台特定实现图片显示
-            // 目前显示一个加载指示器
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    Icons.Default.Image,
-                    contentDescription = "处理后的照片",
-                    modifier = Modifier.size(64.dp),
-                    tint = Color.White
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "照片已处理",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White
-                )
-            }
+            // 使用平台特定的原生图片显示组件
+            NativeImageDisplay(
+                imageData = imageData,
+                modifier = Modifier.fillMaxSize(),
+                onClick = onClick
+            )
         } else {
-            PlaceholderContent()
+            PlaceholderContent(onClick = onClick)
         }
     }
 }
@@ -277,7 +267,8 @@ fun PhotoEditorScreen(
                     backgroundType = selectedBackgroundType,
                     hasPhoto = state.originalPhotoData != null,
                     processedImageData = state.processedPhotoData,
-                    isProcessing = isProcessing
+                    isProcessing = isProcessing,
+                    onPickImage = { state.triggerImagePicker() }
                 )
             }
 
@@ -410,7 +401,8 @@ private fun PhotoPreviewWithProcessing(
     backgroundType: BackgroundType,
     hasPhoto: Boolean,
     processedImageData: ByteArray?,
-    isProcessing: Boolean
+    isProcessing: Boolean,
+    onPickImage: () -> Unit
 ) {
     val backgroundModifier = when (backgroundType) {
         BackgroundType.SOLID -> Modifier.background(Color(backgroundColor.colorValue))
@@ -442,11 +434,11 @@ private fun PhotoPreviewWithProcessing(
                 )
             }
             processedImageData != null -> {
-                // 显示处理后的图片 - 由于平台差异，暂时使用占位符
-                // 实际图片显示由各平台特定实现处理
+                // 显示处理后的图片
                 ProcessedPhotoPreview(
                     imageData = processedImageData,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    onClick = onPickImage
                 )
             }
             hasPhoto -> {
@@ -457,15 +449,16 @@ private fun PhotoPreviewWithProcessing(
                 )
             }
             else -> {
-                PlaceholderContent()
+                PlaceholderContent(onClick = onPickImage)
             }
         }
     }
 }
 
 @Composable
-private fun PlaceholderContent() {
+private fun PlaceholderContent(onClick: () -> Unit) {
     Column(
+        modifier = Modifier.clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
@@ -478,7 +471,7 @@ private fun PlaceholderContent() {
         Text(
             text = "请选择或拍摄照片",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray
+            color = Color.Blue
         )
     }
 }
